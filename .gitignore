@@ -56,6 +56,12 @@ cover/
 *.mo
 *.pot
 
+# Claude
+.claude/
+
+# Agent run logs (logging file handler)
+logs/
+
 # Django stuff:
 *.log
 local_settings.py
