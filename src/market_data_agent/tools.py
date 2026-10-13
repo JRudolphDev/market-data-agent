@@ -24,10 +24,15 @@ def summarize_momentum(
     tickers: list[str],
     period: Period = Period.THREE_MONTHS,
 ) -> MomentumReport:
-    prices = get_price_history(tickers, period).ffill().dropna()
+    raw = get_price_history(tickers, period)
+
+    all_blank = raw.isna().all()
+    missing = list(raw.columns[all_blank])
+
+    prices = raw.drop(columns=missing).ffill().dropna()
 
     if len(prices) < 3:
-        raise ValueError("Insufficient price history")
+        raise ValueError(f"Insufficient price history. No data found for: {missing}")
 
     daily_returns = prices.pct_change().dropna()
 
@@ -59,12 +64,13 @@ def summarize_momentum(
         end_date=prices.index[-1],
         trading_days=len(prices),
         results=results,
+        missing_tickers=missing,
     )
 
 
 if __name__ == "__main__":
     result = summarize_momentum(
-        ["NVDA", "AVGO"],
+        ["NVDA", "AVGO", "XXXYZ"],
         Period.THREE_MONTHS,
     )
 
