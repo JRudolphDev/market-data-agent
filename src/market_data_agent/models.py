@@ -22,7 +22,34 @@ class Period(StrEnum):
 
 
 class TickerMomentumInput(BaseModel):
-    """Parameters for analyzing and comparing historical stock momentum."""
+    """
+    Analyze and compare historical price momentum for one or more U.S.-listed stocks.
+
+    Use this tool when asked to evaluate stock performance, compare momentum,
+    identify stronger performers, or assess returns relative to volatility.
+
+    Calculates the following metrics using adjusted daily closing prices:
+    - total_return: Cumulative return over the selected period.
+    - period_volatility: Daily return volatility scaled to the analysis period.
+    - risk_adjusted_momentum: Total return divided by period volatility.
+    Higher values indicate stronger returns relative to volatility.
+
+    Output details:
+    - Returns and volatility are decimals rounded to 4 decimal places
+    (e.g., 0.0524 represents 5.24%).
+    - Risk-adjusted momentum is a unitless ratio, not a percentage.
+    - Results are ranked by total return, highest first.
+    - All tickers are evaluated over the same common window. start_date,
+    end_date, and trading_days report the actual window used, which may be
+    shorter than requested if a ticker has limited history.
+    - Unknown or unavailable ticker symbols are reported in `missing_tickers`
+    without failing the entire request.
+    - Valid ticker results are returned even when some symbols are missing.
+
+    Use total_return as the primary measure of price momentum and
+    risk_adjusted_momentum to evaluate performance relative to volatility.
+    Historical momentum does not predict future returns.
+    """
 
     tickers: list[Ticker] = Field(
         description=(
@@ -43,7 +70,6 @@ class TickerMomentumInput(BaseModel):
 
 class TickerMomentumOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     ticker: Ticker
     total_return: Rounded4
     period_volatility: Rounded4

@@ -64,13 +64,12 @@ def summarize_momentum(
         end_date=prices.index[-1],
         trading_days=len(prices),
         results=results,
-        missing_tickers=missing,
     )
 
 
 if __name__ == "__main__":
     result = summarize_momentum(
-        ["NVDA", "AVGO", "XXXYZ"],
+        ["NVDA", "AVGO"],
         Period.THREE_MONTHS,
     )
 
