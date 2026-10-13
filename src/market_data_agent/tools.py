@@ -1,7 +1,9 @@
+"""This file holds the functions that will be called by the agent"""
+
 import pandas as pd
 import yfinance as yf
 
-from market_data_agent.models import Period
+from market_data_agent.models import MomentumReport, Period, TickerMomentumOutput
 
 
 def get_price_history(
@@ -21,7 +23,7 @@ def get_price_history(
 def summarize_momentum(
     tickers: list[str],
     period: Period = Period.THREE_MONTHS,
-) -> pd.DataFrame:
+) -> MomentumReport:
     prices = get_price_history(tickers, period).ffill().dropna()
 
     if len(prices) < 3:
@@ -38,16 +40,32 @@ def summarize_momentum(
             "period_volatility": volatility,
             "risk_adjusted_momentum": total_return / volatility,
         }
-    )
+    ).sort_values("total_return", ascending=False)
 
-    return summary.sort_values("total_return", ascending=False)
+    results = []
+    for ticker in summary.index:
+        results.append(
+            TickerMomentumOutput(
+                ticker=ticker,
+                total_return=summary.loc[ticker, "total_return"],
+                period_volatility=summary.loc[ticker, "period_volatility"],
+                risk_adjusted_momentum=summary.loc[ticker, "risk_adjusted_momentum"],
+            )
+        )
+
+    return MomentumReport(
+        period=period,
+        start_date=prices.index[0],
+        end_date=prices.index[-1],
+        trading_days=len(prices),
+        results=results,
+    )
 
 
 if __name__ == "__main__":
-    # Example
     result = summarize_momentum(
         ["NVDA", "AVGO"],
         Period.THREE_MONTHS,
     )
 
-    print(result)
+    print(result.model_dump_json())
