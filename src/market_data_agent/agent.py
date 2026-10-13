@@ -38,7 +38,7 @@ def run_agent(client: anthropic.Anthropic, question: str) -> str:
     for _ in range(MAX_ITERATIONS):
         response = client.messages.create(
             model=MODEL_ID,
-            max_tokens=16000,
+            max_tokens=512,
             output_config={"effort": "medium"},
             tools=TOOLS,
             messages=messages,
@@ -55,14 +55,23 @@ def run_agent(client: anthropic.Anthropic, question: str) -> str:
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
-                    result = run_tool(block.name, block.input)
+                    try:
+                        content = run_tool(block.name, block.input)
+                        is_error = False
+
+                    except Exception as e:
+                        content = str(e)
+                        is_error = True
+
                     tool_results.append(
                         {
                             "type": "tool_result",
                             "tool_use_id": block.id,
-                            "content": result,
+                            "content": content,
+                            "is_error": is_error,
                         }
                     )
+
             messages.append({"role": "user", "content": tool_results})
 
     raise RuntimeError(f"No final answer after {MAX_ITERATIONS} iterations")
@@ -74,5 +83,5 @@ if __name__ == "__main__":
     load_dotenv()
     client = anthropic.Anthropic()
 
-    example_question = "Which company has better momentum in the past 6 months, Nvidia or AMD?"
+    example_question = input("Ask: ")
     print(run_agent(client, question=example_question))
