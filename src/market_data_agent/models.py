@@ -2,7 +2,7 @@ from datetime import date
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import AfterValidator, BaseModel, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
 
 Ticker = Annotated[str, StringConstraints(to_upper=True, pattern=r"^[A-Za-z.\-]{1,10}$")]
 Rounded4 = Annotated[float, AfterValidator(lambda v: round(v, 4))]
@@ -42,6 +42,8 @@ class TickerMomentumInput(BaseModel):
 
 
 class TickerMomentumOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     ticker: Ticker
     total_return: Rounded4
     period_volatility: Rounded4
@@ -49,11 +51,14 @@ class TickerMomentumOutput(BaseModel):
 
 
 class MomentumReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     period: Period
     start_date: date
     end_date: date
     trading_days: int
     results: list[TickerMomentumOutput]
+    missing_tickers: list[str] = []
 
 
 if __name__ == "__main__":
