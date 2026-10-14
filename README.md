@@ -32,7 +32,7 @@ The answer contains:
 ## Example
 
 ```
-uv run market-agent Of NVDA, AMD and AVGO, which has the strongest momentum over 6 months, is any of them overbought, and which is cheapest?
+uv run market-agent "Of NVDA, AMD and AVGO, which has the strongest momentum over 6 months, is any of them overbought, and which is cheapest?"
 ```
 
 ```
