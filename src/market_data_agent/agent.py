@@ -1,33 +1,38 @@
 """Will operate the loop sequence"""
 
 import anthropic
+from pydantic import BaseModel
 
-from market_data_agent.models import TickerMomentumInput
-from market_data_agent.tools import summarize_momentum
+from market_data_agent.models import TickerFundamentalInput, TickerMomentumInput
+from market_data_agent.tools import summarize_fundamentals, summarize_momentum
 
 MODEL_ID = "claude-sonnet-5-5"
 MAX_ITERATIONS = 8
 
-_schema = TickerMomentumInput.model_json_schema()
-_schema.pop("description", None)
-
-TOOLS = [
-    {
-        "name": "summarize_momentum",
-        "description": TickerMomentumInput.__doc__,
-        "input_schema": _schema,
-    }
-]
-
 TOOL_REGISTRY = {
     "summarize_momentum": (TickerMomentumInput, summarize_momentum),
+    "summarize_fundamentals": (TickerFundamentalInput, summarize_fundamentals),
 }
+
+
+def _tool_definition(name: str, input_model: type[BaseModel]) -> dict:
+    schema = input_model.model_json_schema()
+    schema.pop("description", None)
+    return {
+        "name": name,
+        "description": input_model.__doc__,
+        "input_schema": schema,
+    }
+
+
+TOOLS = [_tool_definition(name, model) for name, (model, _) in TOOL_REGISTRY.items()]
 
 
 def run_tool(name: str, tool_input: dict) -> str:
     input_model, func = TOOL_REGISTRY[name]
     args = input_model.model_validate(tool_input)
-    report = func(args.tickers, args.period)
+    kwargs = args.model_dump()
+    report = func(**kwargs)  # unpack the kwargs
 
     return report.model_dump_json()
 
@@ -38,7 +43,7 @@ def run_agent(client: anthropic.Anthropic, question: str) -> str:
     for _ in range(MAX_ITERATIONS):
         response = client.messages.create(
             model=MODEL_ID,
-            max_tokens=512,
+            max_tokens=16000,
             output_config={"effort": "medium"},
             tools=TOOLS,
             messages=messages,
@@ -49,7 +54,7 @@ def run_agent(client: anthropic.Anthropic, question: str) -> str:
                 if block.type == "text":
                     return block.text
 
-        if response.stop_reason == "tool_use":
+        elif response.stop_reason == "tool_use":
             messages.append({"role": "assistant", "content": response.content})
 
             tool_results = []
@@ -73,6 +78,9 @@ def run_agent(client: anthropic.Anthropic, question: str) -> str:
                     )
 
             messages.append({"role": "user", "content": tool_results})
+
+        else:
+            raise RuntimeError(f"Unexpected stop_reason: {response.stop_reason}")
 
     raise RuntimeError(f"No final answer after {MAX_ITERATIONS} iterations")
 
