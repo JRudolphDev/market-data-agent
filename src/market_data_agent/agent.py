@@ -76,7 +76,7 @@ def run_agent(client: anthropic.Anthropic, question: str) -> AgentResponse:
                 if block.type == "tool_use":
                     try:
                         content = run_tool(block.name, block.input)
-                        tools_used.append(block.name)
+                        tools_used.append(block.name)  # record only tools that returned data
                         is_error = False
 
                     except Exception as e:
