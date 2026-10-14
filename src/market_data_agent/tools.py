@@ -1,9 +1,33 @@
 """This file holds the functions that will be called by the agent"""
 
+from datetime import date
+
 import pandas as pd
 import yfinance as yf
 
-from market_data_agent.models import MomentumReport, Period, TickerMomentumOutput
+from market_data_agent.models import (
+    FundamentalReport,
+    MomentumReport,
+    Period,
+    TickerFundamentalOutput,
+    TickerMomentumOutput,
+)
+
+# output name -> yfinance .info key
+FIELDS = {
+    "market_cap": "marketCap",
+    "forward_eps": "forwardEps",  # not in output, used to derive earnings_yield
+    "price": "currentPrice",  # not in output, used to derive earnings_yield
+    "ev_to_sales": "enterpriseToRevenue",
+    "ev_to_ebitda": "enterpriseToEbitda",
+    "profit_margin": "profitMargins",
+    "roe": "returnOnEquity",
+    "revenue_growth": "revenueGrowth",
+    "debt_to_equity": "debtToEquity",  # yfinance reports as percent (150 = 1.5x)
+    "free_cashflow": "freeCashflow",  # not in output, used to derive fcf_yield
+}
+
+DERIVED_INPUTS = ["forward_eps", "price", "free_cashflow"]
 
 
 def get_price_history(
@@ -65,6 +89,54 @@ def summarize_momentum(
         trading_days=len(prices),
         results=results,
     )
+
+
+def get_fundamentals(tickers: list[str]) -> pd.DataFrame:
+    rows = {}
+    for t in tickers:
+        info = yf.Ticker(t).info
+        if not info.get("marketCap"):
+            continue
+        rows[t] = {k: info.get(v) for k, v in FIELDS.items()}
+        rows[t]["sector"] = info.get("sector")
+    return pd.DataFrame.from_dict(rows, orient="index")
+
+
+def rank_score(df: pd.DataFrame, cols: list[str]) -> pd.Series:
+    """Average percentile rank across cols (0 to 1, higher is better)."""
+    return df[cols].rank(pct=True).mean(axis=1)
+
+
+def summarize_fundamentals(tickers: list[str]) -> FundamentalReport:
+    df = get_fundamentals(tickers)
+    missing_tickers = [t for t in tickers if t not in df.index]
+
+    if df.empty:
+        raise ValueError(f"No fundamental data found for: {missing_tickers}")
+
+    num = list(FIELDS)
+    df[num] = df[num].apply(pd.to_numeric, errors="coerce")
+
+    df["debt_to_equity"] = df["debt_to_equity"] / 100
+
+    # yields stay correctly ordered when earnings are negative, unlike P/E
+    df["fcf_yield"] = df["free_cashflow"] / df["market_cap"]
+    df["earnings_yield"] = df["forward_eps"] / df["price"]
+    df = df.drop(columns=DERIVED_INPUTS)
+
+    if len(df) >= 3:
+        # percentile ranks within this ticker set (0 to 1, higher is better)
+        df["value_score"] = rank_score(df, ["earnings_yield", "fcf_yield"])
+        df["quality_score"] = rank_score(df, ["roe", "profit_margin", "revenue_growth"])
+    else:
+        df["value_score"] = None
+        df["quality_score"] = None
+
+    df = df.sort_values("quality_score", ascending=False)
+    df = df.astype(object).where(df.notna(), None)
+
+    results = [TickerFundamentalOutput(ticker=t, **row) for t, row in df.to_dict("index").items()]
+    return FundamentalReport(as_of=date.today(), missing_tickers=missing_tickers, results=results)
 
 
 if __name__ == "__main__":
