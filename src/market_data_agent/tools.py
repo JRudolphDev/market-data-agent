@@ -94,6 +94,7 @@ def summarize_momentum(
         end_date=prices.index[-1],
         trading_days=len(prices),
         results=results,
+        missing_tickers=missing,
     )
 
 
