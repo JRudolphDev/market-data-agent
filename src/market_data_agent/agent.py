@@ -67,6 +67,7 @@ def run_agent(client: anthropic.Anthropic, question: str) -> AgentResponse:
                 if block.type == "text":
                     answer = FinalAnswer.model_validate_json(block.text)
                     return AgentResponse(answer=answer, tools_used=tools_used)
+            raise RuntimeError("Claude finished without a text answer")
 
         elif response.stop_reason == "tool_use":
             messages.append({"role": "assistant", "content": response.content})
