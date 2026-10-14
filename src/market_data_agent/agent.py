@@ -4,6 +4,8 @@ import anthropic
 from pydantic import BaseModel
 
 from market_data_agent.models import (
+    AgentResponse,
+    FinalAnswer,
     TickerFundamentalInput,
     TickerMomentumInput,
     TickerTechnicalInput,
@@ -32,6 +34,11 @@ def _tool_definition(name: str, input_model: type[BaseModel]) -> dict:
 
 TOOLS = [_tool_definition(name, model) for name, (model, _) in TOOL_REGISTRY.items()]
 
+ANSWER_FORMAT = {
+    "type": "json_schema",
+    "schema": FinalAnswer.model_json_schema(),
+}
+
 
 def run_tool(name: str, tool_input: dict) -> str:
     input_model, func = TOOL_REGISTRY[name]
@@ -42,14 +49,15 @@ def run_tool(name: str, tool_input: dict) -> str:
     return report.model_dump_json()
 
 
-def run_agent(client: anthropic.Anthropic, question: str) -> str:
+def run_agent(client: anthropic.Anthropic, question: str) -> AgentResponse:
     messages = [{"role": "user", "content": question}]
+    tools_used = []
 
     for _ in range(MAX_ITERATIONS):
         response = client.messages.create(
             model=MODEL_ID,
             max_tokens=16000,
-            output_config={"effort": "medium"},
+            output_config={"effort": "medium", "format": ANSWER_FORMAT},
             tools=TOOLS,
             messages=messages,
         )
@@ -57,7 +65,8 @@ def run_agent(client: anthropic.Anthropic, question: str) -> str:
         if response.stop_reason == "end_turn":
             for block in response.content:
                 if block.type == "text":
-                    return block.text
+                    answer = FinalAnswer.model_validate_json(block.text)
+                    return AgentResponse(answer=answer, tools_used=tools_used)
 
         elif response.stop_reason == "tool_use":
             messages.append({"role": "assistant", "content": response.content})
@@ -67,6 +76,7 @@ def run_agent(client: anthropic.Anthropic, question: str) -> str:
                 if block.type == "tool_use":
                     try:
                         content = run_tool(block.name, block.input)
+                        tools_used.append(block.name)
                         is_error = False
 
                     except Exception as e:
@@ -97,4 +107,4 @@ if __name__ == "__main__":
     client = anthropic.Anthropic()
 
     example_question = input("Ask: ")
-    print(run_agent(client, question=example_question))
+    print(run_agent(client, question=example_question).model_dump_json(indent=2))

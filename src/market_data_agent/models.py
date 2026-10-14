@@ -2,7 +2,14 @@ from datetime import date
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    model_validator,
+)
 
 Ticker = Annotated[str, StringConstraints(to_upper=True, pattern=r"^[A-Za-z.\-]{1,10}$")]
 Tickers = Annotated[
@@ -37,6 +44,22 @@ class Trend(StrEnum):
     UPTREND = "uptrend"
     DOWNTREND = "downtrend"
     MIXED = "mixed"
+
+
+class Verdict(StrEnum):
+    """How a ticker comes out on the criterion the user asked about.
+
+    Not a buy rating. The direction is set by the question: for "which is
+    cheaper", FAVORED means cheaper; for "is it overbought", FAVORED means not
+    overbought. FAVORED is always the good end of whatever was asked.
+
+    One Verdict per criterion the question asks about. See TickerScan.verdicts.
+    """
+
+    FAVORED = "favored"
+    NEUTRAL = "neutral"
+    UNFAVORED = "unfavored"
+    INSUFFICIENT_DATA = "insufficient_data"
 
 
 class TickerMomentumInput(BaseModel):
@@ -266,6 +289,74 @@ class TechnicalReport(BaseModel):
     results: list[TickerTechnicalOutput]
     missing_tickers: list[str] = []
     insufficient_history: list[str] = []
+
+
+class TickerScan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ticker: Ticker
+    verdicts: list[Verdict]
+    key_points: list[str]
+
+
+class FinalAnswer(BaseModel):
+    """
+    The structured answer to a market data question.
+
+    Fill this in from the tool results. Do not compute new numbers; every
+    figure cited must appear in a tool result, copied exactly.
+
+    - headline: One sentence answering the question that was asked. State the
+      conclusion, not what was analyzed. Write "NVDA is the stronger performer
+      over three months", not "I compared NVDA and AMD".
+    - criteria: The dimensions the question asks you to judge, in short
+      consistent names such as "momentum", "valuation", or "overbought".
+      Empty for purely descriptive questions that have no better or worse
+      answer, such as "what is NVDA's RSI".
+    - verdicts (in each scan row): One Verdict per criterion, in the same
+      order as criteria. favored is the good end of what was asked.
+    - key_points (in each scan row): One to three short points, citing the
+      numbers that drove the verdicts.
+    - scan: One entry for every ticker the user asked about, including tickers
+      that returned no data. Order rows from most to least favored on the
+      first criterion, or keep the user's order when there are no criteria.
+      For a ticker with no data from any tool, set every verdict to
+      insufficient_data and use key_points to say why (for example, unknown
+      symbol or too little trading history). Never drop a requested ticker.
+    - detail: Free-form reasoning, two to four sentences. Explain why the
+      verdicts came out as they did. When a ticker is favored on one criterion
+      and unfavored on another, say so here rather than letting the split pass
+      without comment. Leave empty when the headline and key points already
+      cover it.
+    - caveats: One short sentence per limitation. Use for metrics that are null
+      or negative, and any case where a number is less reliable than it looks.
+      Leave empty when there are none; do not invent filler.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    headline: str
+    criteria: list[str]
+    scan: list[TickerScan]
+    detail: str
+    caveats: list[str]
+
+    @model_validator(mode="after")
+    def verdicts_match_criteria(self):
+        for row in self.scan:
+            if len(row.verdicts) != len(self.criteria):
+                raise ValueError(
+                    f"{row.ticker} has {len(row.verdicts)} verdicts "
+                    f"but there are {len(self.criteria)} criteria"
+                )
+        return self
+
+
+class AgentResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    answer: FinalAnswer
+    tools_used: list[str]
 
 
 if __name__ == "__main__":
