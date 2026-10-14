@@ -3,8 +3,12 @@
 import anthropic
 from pydantic import BaseModel
 
-from market_data_agent.models import TickerFundamentalInput, TickerMomentumInput
-from market_data_agent.tools import summarize_fundamentals, summarize_momentum
+from market_data_agent.models import (
+    TickerFundamentalInput,
+    TickerMomentumInput,
+    TickerTechnicalInput,
+)
+from market_data_agent.tools import summarize_fundamentals, summarize_momentum, summarize_technicals
 
 MODEL_ID = "claude-sonnet-5-5"
 MAX_ITERATIONS = 8
@@ -12,6 +16,7 @@ MAX_ITERATIONS = 8
 TOOL_REGISTRY = {
     "summarize_momentum": (TickerMomentumInput, summarize_momentum),
     "summarize_fundamentals": (TickerFundamentalInput, summarize_fundamentals),
+    "summarize_technicals": (TickerTechnicalInput, summarize_technicals),
 }
 
 

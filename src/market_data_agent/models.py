@@ -33,6 +33,12 @@ class Period(StrEnum):
     YEAR_TO_DATE = "ytd"
 
 
+class Trend(StrEnum):
+    UPTREND = "uptrend"
+    DOWNTREND = "downtrend"
+    MIXED = "mixed"
+
+
 class TickerMomentumInput(BaseModel):
     """
     Analyze and compare historical price momentum for one or more U.S.-listed stocks.
@@ -176,6 +182,90 @@ class FundamentalReport(BaseModel):
     as_of: date
     results: list[TickerFundamentalOutput]
     missing_tickers: list[str] = []
+
+
+class TickerTechnicalInput(BaseModel):
+    """
+    Analyze price trend and chart position for one or more U.S.-listed stocks.
+
+    Use this tool when asked where a stock is trading relative to its own
+    history, whether it is overbought or oversold, how far it has fallen from
+    its highs, or whether it is above or below its moving averages. Do not use
+    it to measure returns or compare performance, which the momentum tool
+    covers.
+
+    Reports the following metrics from the last two years of daily adjusted
+    OHLCV data:
+    - price: Most recent closing price in USD.
+    - rsi_14: Relative strength index over 14 days, from 0 to 100. Above 70 is
+      conventionally overbought, below 30 oversold.
+    - pct_from_sma_50: Price relative to its 50 day simple moving average.
+    - pct_from_sma_200: Price relative to its 200 day simple moving average.
+    - trend: One of uptrend, downtrend, or mixed. uptrend means price is above
+      the 50 day average and the 50 day is above the 200 day. downtrend is the
+      reverse. mixed means the two averages disagree, which includes recent
+      crossovers in either direction.
+    - pct_from_52w_high: Drawdown from the highest intraday price of the last
+      52 weeks. Always zero or negative.
+    - pct_from_52w_low: Gain above the lowest intraday price of the last 52
+      weeks. Always zero or positive.
+    - atr_pct: Average true range over 14 days divided by price. A measure of
+      typical daily range that accounts for overnight gaps.
+    - relative_volume: Average volume over the last 20 days divided by average
+      volume over the last 52 weeks.
+
+    Output details:
+    - Percentages and ratios are decimals (e.g., -0.0524 represents a 5.24%
+      decline). rsi_14 is a 0 to 100 index, not a decimal.
+    - relative_volume above 1.0 means recent trading is heavier than the yearly
+      baseline, which suggests a price move has participation behind it. Below
+      1.0 suggests a move is happening on thin volume.
+    - atr_pct is a volatility measure, not a directional signal. Use it to size
+      stops or to compare how much two stocks typically move in a day.
+    - Lookback windows are fixed at the conventional 14, 50, and 200 days and
+      52 weeks. They are not configurable.
+    - Results are ranked by pct_from_52w_high, closest to the high first.
+    - as_of reports the date of the most recent close used.
+    - Tickers with fewer than 200 trading days of history, including recent
+      IPOs, cannot produce a 200 day average and are reported in
+      `insufficient_history` without failing the entire request.
+    - Unknown or unavailable ticker symbols are reported in `missing_tickers`
+      without failing the entire request. Tell the user the stock is too new
+      for these indicators, not that it doesn't exist.
+    - Valid ticker results are returned even when some symbols are missing.
+
+    These indicators describe where price has been, not where it is going.
+    Evidence that they predict future returns is weak, so treat them as context
+    alongside fundamentals and momentum rather than as standalone signals. An
+    extreme rsi_14 reading can persist for weeks in a strong trend and is not
+    on its own a reason to expect a reversal.
+    """
+
+    tickers: Tickers
+
+
+class TickerTechnicalOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ticker: Ticker
+    price: Rounded4 | None
+    rsi_14: Rounded4 | None
+    pct_from_sma_50: Rounded4 | None
+    pct_from_sma_200: Rounded4 | None
+    trend: Trend | None
+    pct_from_52w_high: Rounded4 | None
+    pct_from_52w_low: Rounded4 | None
+    atr_pct: Rounded4 | None
+    relative_volume: Rounded4 | None
+
+
+class TechnicalReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    as_of: date
+    results: list[TickerTechnicalOutput]
+    missing_tickers: list[str] = []
+    insufficient_history: list[str] = []
 
 
 if __name__ == "__main__":

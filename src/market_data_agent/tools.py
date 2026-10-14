@@ -9,8 +9,10 @@ from market_data_agent.models import (
     FundamentalReport,
     MomentumReport,
     Period,
+    TechnicalReport,
     TickerFundamentalOutput,
     TickerMomentumOutput,
+    TickerTechnicalOutput,
 )
 
 # output name -> yfinance .info key
@@ -28,6 +30,10 @@ FIELDS = {
 }
 
 DERIVED_INPUTS = ["forward_eps", "price", "free_cashflow"]
+
+RSI_PERIOD = 14
+ATR_PERIOD = 14
+TRADING_DAYS_YEAR = 252
 
 
 def get_price_history(
@@ -137,6 +143,104 @@ def summarize_fundamentals(tickers: list[str]) -> FundamentalReport:
 
     results = [TickerFundamentalOutput(ticker=t, **row) for t, row in df.to_dict("index").items()]
     return FundamentalReport(as_of=date.today(), missing_tickers=missing_tickers, results=results)
+
+
+def wilder(s: pd.Series, period: int) -> pd.Series:
+    return s.ewm(alpha=1 / period, adjust=False).mean()
+
+
+def compute_rsi(close: pd.Series) -> float:
+    delta = close.diff()
+    gain = wilder(delta.clip(lower=0), RSI_PERIOD)
+    loss = wilder(-delta.clip(upper=0), RSI_PERIOD)
+    rs = gain / loss
+    return (100 - 100 / (1 + rs)).iloc[-1]
+
+
+def compute_atr_pct(df: pd.DataFrame) -> float:
+    prev_close = df["Close"].shift()
+    tr = pd.concat(
+        [
+            df["High"] - df["Low"],
+            (df["High"] - prev_close).abs(),
+            (df["Low"] - prev_close).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+    return wilder(tr, ATR_PERIOD).iloc[-1] / df["Close"].iloc[-1]
+
+
+def classify_trend(price: float, sma_50: float, sma_200: float) -> str:
+    if price > sma_50 > sma_200:
+        return "uptrend"
+    if price < sma_50 < sma_200:
+        return "downtrend"
+    return "mixed"
+
+
+def analyze_ticker(df: pd.DataFrame) -> dict:
+    close = df["Close"]
+    price = close.iloc[-1]
+
+    sma_50 = close.rolling(50).mean().iloc[-1]
+    sma_200 = close.rolling(200).mean().iloc[-1]
+
+    year = df.tail(TRADING_DAYS_YEAR)
+    high_52w = year["High"].max()
+    low_52w = year["Low"].min()
+
+    # recent volume vs the longer baseline, confirms whether a move has support
+    volume = df["Volume"]
+    relative_volume = volume.tail(20).mean() / volume.tail(TRADING_DAYS_YEAR).mean()
+
+    return {
+        "price": price,
+        "rsi_14": compute_rsi(close),
+        "pct_from_sma_50": price / sma_50 - 1,
+        "pct_from_sma_200": price / sma_200 - 1,
+        "trend": classify_trend(price, sma_50, sma_200),
+        "pct_from_52w_high": price / high_52w - 1,
+        "pct_from_52w_low": price / low_52w - 1,
+        "atr_pct": compute_atr_pct(df),
+        "relative_volume": relative_volume,
+    }
+
+
+def summarize_technicals(tickers: list[str]) -> TechnicalReport:
+    rows = {}
+    last_dates = []
+    insufficient_history = []
+    for t in tickers:
+        # 2y so the 200 day average and 52 week range are fully populated
+        df = yf.Ticker(t).history(period="2y", auto_adjust=True)
+        if df.empty:
+            continue
+        if len(df) < 200:
+            insufficient_history.append(t)
+            continue
+        rows[t] = analyze_ticker(df)
+        last_dates.append(df.index[-1])
+
+    missing_tickers = [t for t in tickers if t not in rows and t not in insufficient_history]
+
+    if not rows:
+        raise ValueError(
+            f"No technical data. Unknown tickers: {missing_tickers}. "
+            f"Fewer than 200 trading days: {insufficient_history}."
+        )
+
+    summary = pd.DataFrame.from_dict(rows, orient="index")
+    summary = summary.sort_values("pct_from_52w_high", ascending=False)
+
+    results = [
+        TickerTechnicalOutput(ticker=t, **row) for t, row in summary.to_dict("index").items()
+    ]
+    return TechnicalReport(
+        as_of=max(last_dates),
+        missing_tickers=missing_tickers,
+        insufficient_history=insufficient_history,
+        results=results,
+    )
 
 
 if __name__ == "__main__":
