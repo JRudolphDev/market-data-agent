@@ -303,8 +303,11 @@ class FinalAnswer(BaseModel):
     """
     The structured answer to a market data question.
 
-    Fill this in from the tool results. Do not compute new numbers; every
-    figure cited must appear in a tool result, copied exactly.
+    Fill this in from the tool results. Every number you cite must come from a
+    tool result. You may reformat a number for readability: write decimals as
+    percentages (0.1262 becomes 12.6%), round to one decimal place, and write
+    multiples with an x (27.246 becomes 27.2x). Do not derive new numbers, such
+    as differences, averages, or ratios between tickers.
 
     - headline: One sentence answering the question that was asked. State the
       conclusion, not what was analyzed. Write "NVDA is the stronger performer
@@ -316,7 +319,7 @@ class FinalAnswer(BaseModel):
     - verdicts (in each scan row): One Verdict per criterion, in the same
       order as criteria. favored is the good end of what was asked.
     - key_points (in each scan row): One to three short points, citing the
-      numbers that drove the verdicts.
+      numbers that drove the verdicts, formatted as above.
     - scan: One entry for every ticker the user asked about, including tickers
       that returned no data. Order rows from most to least favored on the
       first criterion, or keep the user's order when there are no criteria.
