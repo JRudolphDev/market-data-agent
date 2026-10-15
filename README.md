@@ -4,18 +4,18 @@ This is a Python agent that answers natural-language questions about equities
 by calling tools. Claude decides which tools to call and can combine several
 tools' results into one answer. The answer is structured and validated
 (Pydantic), not free text. This agent uses a raw Claude API tool-calling loop,
-no agent frameworks.
+no agent frameworks. It runs on claude-sonnet-5-5, pinned in agent.py.
 
-Claude never calculates. The tools compute every metric in pandas and return
-them as typed models; Claude selects which numbers matter for the question
-asked and explains them.
+Claude does no math beyond reformatting. The tools compute every metric in
+pandas; Claude converts units for readability (decimals to percentages,
+earnings yield to P/E), picks which numbers matter, and explains them.
 
 Three tools are available:
 
 - Momentum: returns and volatility over a lookback period.
 - Fundamentals: valuation, profitability, growth, and leverage.
 - Technicals: trend, RSI, and position relative to moving averages and the
-  52 week range.
+  52-week range.
 
 The answer contains:
 
@@ -24,8 +24,8 @@ The answer contains:
   question. A question about valuation and momentum produces two verdicts per
   ticker.
 - Key points citing the specific numbers behind each verdict.
-- Caveats for missing tickers, null metrics, and scores that are unreliable
-  on small ticker sets.
+- Caveats for missing tickers, missing metrics, and anything that makes a
+  number less reliable than it looks.
 - The list of tools that ran, recorded by the loop rather than reported by
   Claude, so it is always accurate.
 
@@ -36,26 +36,28 @@ uv run market-agent "Of NVDA, AMD and AVGO, which has the strongest momentum ove
 ```
 
 ```
+AMD has the strongest 6-month momentum, none of the three is overbought, and NVDA is the cheapest on most valuation multiples.
+
 TICKER  MOMENTUM            OVERBOUGHT          VALUATION
 AMD     favored             favored             unfavored
-          - 6-month return of 121.2%, with risk-adjusted momentum of 2.3 on 53.5% volatility.
-          - RSI is 46.5, so it is not overbought. It is in an uptrend and 13.3% below its 52-week high.
-          - Most expensive: EV/sales 23.7x, EV/EBITDA 102.5x and earnings yield only 2.8%.
+          - 6-month return of 121.2%, with a risk-adjusted momentum of 2.3 on 53.5% volatility.
+          - RSI of 46.5, and the price is 6.8% above its 50-day average, in an uptrend.
+          - Priciest of the three: EV/sales 22.3x, EV/EBITDA 96.5x, earnings yield 2.8%.
 NVDA    neutral             favored             favored
-          - 6-month return of 11.5%, with risk-adjusted momentum of 0.4.
-          - RSI is 44.0, so it is not overbought. Price is 0.8% below its 50-day average.
-          - Cheapest on most multiples: EV/sales 18.1x, EV/EBITDA 27.2x and earnings yield 7.2%, which is a forward P/E of about 13.9.
+          - 6-month return of 11.5%, with a risk-adjusted momentum of 0.4.
+          - RSI of 44.0, so not overbought, and the price is 9.1% below its 52-week high.
+          - Cheapest on most measures: EV/sales 17.5x, EV/EBITDA 26.4x, earnings yield 7.2%, which is a forward P/E of roughly 14.
 AVGO    unfavored           favored             neutral
-          - 6-month return of -12.4%, with negative risk-adjusted momentum of -0.4.
-          - RSI is 42.4, so it is not overbought. Price is 29.8% below its 52-week high.
-          - Mid-range valuation: EV/sales 19.5x, EV/EBITDA 33.3x and earnings yield 5.6%. Its FCF yield of 1.9% is the best of the three.
+          - 6-month return of -12.4%, with a risk-adjusted momentum of -0.4.
+          - RSI of 42.4, and the price is 29.8% below its 52-week high.
+          - Mid-range valuation: EV/sales 18.9x, EV/EBITDA 32.3x, earnings yield 5.6%, and the highest FCF yield at 1.9%.
 
-AMD's 6-month gain far outpaced NVDA and AVGO, but it also carries the highest valuation multiples, so strong momentum comes with the priciest valuation. NVDA is cheapest on EV/sales, EV/EBITDA and earnings yield. AVGO ranks higher on FCF yield and has the top value score, so which stock is cheapest depends on the metric used. All three RSIs are in the low-to-mid 40s, which shows no overbought condition.
+AMD's 6-month return is far ahead of the others, though it came with the highest volatility. All three RSI readings are between 42 and 47, so none is overbought, and relative volume is below 1.0 for NVDA and AMD. NVDA is cheapest on EV/sales, EV/EBITDA and earnings yield. AVGO scores highest on the composite value score because its FCF yield is higher. AMD has the strongest momentum but is also the most expensive.
 
 Caveats:
-  - Forward earnings yield is based on analyst estimates.
-  - FCF yields are all low, at 2% or less, so the FCF-based value ranking is less informative.
-  - Historical momentum and technical readings do not predict future returns.
+  - Earnings yield is based on analyst forward estimates.
+  - FCF yields are low for all three, so the composite value score is less informative than the multiples.
+  - Past momentum does not predict future returns.
 
 Tools used: summarize_momentum, summarize_technicals, summarize_fundamentals
 ```
@@ -137,8 +139,8 @@ means 5%.
 
 - Inputs: tickers and a lookback period (5d, 1mo, 3mo, 6mo, 1y, 2y, 5y or ytd).
 - Returns: total return, volatility over the period, and risk-adjusted
-  momentum (return divided by volatility, so a higher number means a
-  smoother climb).
+  momentum (return divided by volatility, so a higher number means more
+  return for each unit of volatility).
 
 **summarize_fundamentals** answers "how cheap and how healthy is the company?"
 
@@ -154,9 +156,9 @@ means 5%.
 history?"
 
 - Inputs: tickers.
-- Returns: price, 14 day RSI (a 0 to 100 gauge where above 70 usually means
-  overbought), distance from the 50 and 200 day moving averages, a trend
-  label (uptrend, downtrend or mixed), distance from the 52 week high and low,
+- Returns: price, 14-day RSI (a 0 to 100 gauge where above 70 usually means
+  overbought), distance from the 50-day and 200-day moving averages, a trend
+  label (uptrend, downtrend or mixed), distance from the 52-week high and low,
   ATR as a share of price (average daily price range), and relative volume
   (recent trading volume compared to the past year).
 
@@ -240,6 +242,9 @@ Limitations:
 
 Next steps:
 
+- Cache the tool definitions with prompt caching. They are about 3,800
+  tokens and get sent on every call in the loop, so a three-call question
+  sends them three times.
 - Stream the answer as Claude writes it, instead of waiting for the full
   reply.
 - Keep conversation memory, so follow-up questions work.
