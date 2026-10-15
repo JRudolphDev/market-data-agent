@@ -4,7 +4,7 @@ This is a Python agent that answers natural-language questions about equities
 by calling tools. Claude decides which tools to call and can combine several
 tools' results into one answer. The answer is structured and validated
 (Pydantic), not free text. This agent uses a raw Claude API tool-calling loop,
-no agent frameworks. It runs on claude-sonnet-5-5, pinned in agent.py.
+no agent frameworks. It runs on `claude-sonnet-5-5`, pinned in `agent.py`.
 
 Claude does no math beyond reformatting. The tools compute every metric in
 pandas; Claude converts units for readability (decimals to percentages,
@@ -107,8 +107,8 @@ the Claude API, with no agent framework.
 2. **Call the API.** Each call sends the full `messages` list, the three tool
    definitions, and the answer format. A tool definition is built from its
    Pydantic input model: the docstring tells Claude when to use the tool, and
-   the fields become its input schema. The answer format is the JSON schema
-   of `FinalAnswer`.
+   the fields become its input schema. The answer format is the JSON schema of
+   `FinalAnswer`.
 3. **Check why Claude stopped.** Every reply has a stop reason, a label for
    why Claude stopped writing.
    - `tool_use`: Claude wants data. The loop appends Claude's reply to
@@ -119,28 +119,28 @@ the Claude API, with no agent framework.
      `FinalAnswer`, attaches the list of tools that ran, and returns.
    - Anything else: the loop raises an error.
 4. **Handle tool errors.** If a tool raises an exception, the loop does not
-   crash. It sends the error message back to Claude as the tool result,
-   marked as an error. Claude can then retry with different input or explain
-   the gap in its answer. Only tools that returned data go in the tools used
-   list.
-5. **Stop.** The loop ends in one of four ways: a valid answer, an answer
-   that fails validation, an unexpected stop reason, or 8 rounds with no
-   answer (`MAX_ITERATIONS`). The last three raise an error, and the command
-   line prints a short message.
+   crash. It sends the error message back to Claude as the tool result, marked
+   as an error. Claude can then retry with different input or explain the gap
+   in its answer. Only tools that returned data go in the tools used list.
+5. **Stop.** The loop ends when it gets a valid answer. It raises an error
+   when the answer fails validation, Claude stops for an unexpected reason or
+   without text, or 8 rounds pass with no answer. The command line prints a
+   short message when stopped on an error.
 
 ## Tools
 
-A tool is a Python function Claude can ask the agent to run. Each tool takes
-1 to 8 ticker symbols, fetches data from Yahoo Finance with yfinance, and
+A tool is a Python function Claude can ask the agent to run. Each tool takes 1
+to 8 ticker symbols, fetches data from Yahoo Finance with yfinance, and
 computes its metrics in pandas. Percentages come back as decimals, so 0.05
 means 5%.
 
 **summarize_momentum** answers "how has the price moved?"
 
-- Inputs: tickers and a lookback period (5d, 1mo, 3mo, 6mo, 1y, 2y, 5y or ytd).
+- Inputs: tickers and a lookback period (5d, 1mo, 3mo, 6mo, 1y, 2y, 5y or
+  ytd).
 - Returns: total return, volatility over the period, and risk-adjusted
-  momentum (return divided by volatility, so a higher number means more
-  return for each unit of volatility).
+  momentum (return divided by volatility, so a higher number means more return
+  for each unit of volatility).
 
 **summarize_fundamentals** answers "how cheap and how healthy is the company?"
 
@@ -149,8 +149,8 @@ means 5%.
   price), EV/sales and EV/EBITDA (company value divided by sales or by
   operating profit), profit margin, return on equity, revenue growth, debt to
   equity and free cash flow yield. With 3 or more tickers it also returns a
-  value score and a quality score from 0 to 1, ranked within the tickers
-  asked about.
+  value score and a quality score from 0 to 1, ranked within the tickers asked
+  about.
 
 **summarize_technicals** answers "where is the price compared to its own
 history?"
@@ -169,8 +169,8 @@ history?"
 - **Choice:** Each tool returns one report. The period, date and missing
   tickers sit on the report once, with a list of ticker rows inside.
 - **Alternative:** A flat list where every ticker row carries its own copy.
-- **Why:** Every ticker in a report is measured over the same window, so
-  rows can't mix date ranges. It also keeps repeated keys out of the output.
+- **Why:** Every ticker in a report is measured over the same window, so rows
+  can't mix date ranges. It also keeps repeated keys out of the output.
 
 ### Yields instead of P/E for ranking
 
@@ -178,38 +178,38 @@ history?"
   price), not P/E (price divided by earnings).
 - **Alternative:** P/E, the number most people know.
 - **Why:** A company losing money has a negative P/E, say -5. Sorting by P/E
-  puts it first, as if it were the cheapest stock. Its earnings yield of
-  -0.20 sorts last, which is correct. For profitable companies the two are
-  the same number flipped. P/E is not returned at all. Claude flips the
-  yield when someone asks for a P/E.
+  puts it first, as if it were the cheapest stock. Its earnings yield of -0.20
+  sorts last, which is correct. For profitable companies the two are the same
+  number flipped. P/E is not returned at all. Claude flips the yield when
+  someone asks for a P/E.
 
 ### Verdicts attached to criteria, not tickers
 
 - **Choice:** Each ticker holds one verdict per criterion in the question.
 - **Alternative:** One verdict per ticker.
 - **Why:** With one verdict, a stock that wins on momentum and loses on
-  valuation becomes "neutral". That is the same label as a stock where
-  nothing stands out. With one verdict per criterion, a descriptive question
-  gives zero verdicts, a simple comparison gives one, and "better momentum
-  and cheaper" gives two.
+  valuation becomes "neutral". That is the same label as a stock where nothing
+  stands out. With one verdict per criterion, a descriptive question gives
+  zero verdicts, a simple comparison gives one, and "better momentum and
+  cheaper" gives two.
 
 ### Claude picks the numbers, the tools calculate them
 
 - **Choice:** Every metric is computed in pandas and returned as a typed
-  model. The answer schema tells Claude to cite only numbers that appear in
-  a tool result.
+  model. The answer schema tells Claude to cite only numbers that appear in a
+  tool result.
 - **Alternative:** Let Claude work out the numbers from raw prices.
 - **Why:** Math done by the model can be wrong without looking wrong, and
-  there is no way to check it. This way every number in the answer traces
-  back to the tool call that produced it.
+  there is no way to check it. This way every number in the answer traces back
+  to the tool call that produced it.
 
 ### The loop records which tools ran, not Claude
 
 - **Choice:** The code collects each tool name as the tool runs and attaches
   the list after the answer comes back.
 - **Alternative:** Ask Claude to report which tools it called.
-- **Why:** The code already knows. Asking Claude costs output tokens and
-  gives it a chance to misremember.
+- **Why:** The code already knows. Asking Claude costs output tokens and gives
+  it a chance to misremember.
 
 ## Project structure
 
@@ -229,9 +229,9 @@ Limitations:
 
 - **No memory between questions.** Each run starts fresh. A follow-up like
   "what about AMD?" has no earlier question to refer to.
-- **Data quality depends on yfinance.** yfinance is an unofficial library
-  that reads Yahoo Finance. Fields can be missing or out of date. Missing
-  metrics come back empty, and Claude lists them in the caveats.
+- **Data quality depends on yfinance.** yfinance is an unofficial library that
+  reads Yahoo Finance. Fields can be missing or out of date. Missing metrics
+  come back empty, and Claude lists them in the caveats.
 - **Scores are relative.** The value and quality scores rank stocks against
   the other tickers in the same question, not the whole market. They need at
   least 3 tickers.
@@ -242,9 +242,9 @@ Limitations:
 
 Next steps:
 
-- Cache the tool definitions with prompt caching. They are about 3,800
-  tokens and get sent on every call in the loop, so a three-call question
-  sends them three times.
+- Cache the tool definitions with prompt caching. They are about 3,800 tokens
+  and get sent on every call in the loop, so a three-call question sends them
+  three times.
 - Stream the answer as Claude writes it, instead of waiting for the full
   reply.
 - Keep conversation memory, so follow-up questions work.
