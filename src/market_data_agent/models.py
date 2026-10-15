@@ -167,8 +167,12 @@ class TickerFundamentalInput(BaseModel):
       value_score are negative or unreliable. Use ev_to_sales and
       revenue_growth to compare them, and treat value_score as a ranking of who
       burns cash slowest rather than as a measure of cheapness.
-    - Forward P/E is not returned directly. Invert earnings_yield when a user
-      asks for a P/E, and note that it is based on analyst estimates.
+    - Forward P/E is not returned directly. When a user asks for a P/E, give
+      1 divided by earnings_yield and note that it is based on analyst
+      estimates. When earnings_yield is zero or negative, there is no
+      meaningful P/E: say the company is expected to lose money instead of
+      giving a negative or undefined P/E. When earnings_yield is null, say
+      the P/E is not available.
     - Results are ranked by quality_score, highest first.
     - Unknown or unavailable ticker symbols are reported in `missing_tickers`
       without failing the entire request.
@@ -305,9 +309,10 @@ class FinalAnswer(BaseModel):
 
     Fill this in from the tool results. Every number you cite must come from a
     tool result. You may reformat a number for readability: write decimals as
-    percentages (0.1262 becomes 12.6%), round to one decimal place, and write
-    multiples with an x (27.246 becomes 27.2x). Do not derive new numbers, such
-    as differences, averages, or ratios between tickers.
+    percentages (0.1262 becomes 12.6%), round to one decimal place, write
+    multiples with an x (27.246 becomes 27.2x), and give a forward P/E as 1
+    divided by earnings_yield when asked. Do not derive new numbers, such as
+    differences, averages, or ratios between tickers.
 
     - headline: One sentence answering the question that was asked. State the
       conclusion, not what was analyzed. Write "NVDA is the stronger performer
